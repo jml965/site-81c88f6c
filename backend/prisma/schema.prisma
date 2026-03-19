@@ -1,0 +1,520 @@
+// Mazad Motion - Database Schema
+// PostgreSQL database with comprehensive auction platform schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User Management
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  username  String   @unique
+  password  String
+  role      UserRole @default(USER)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  profile       Profile?
+  seller        Seller?
+  auctions      Auction[]
+  bids          Bid[]
+  comments      Comment[]
+  commentLikes  CommentLike[]
+  auctionLikes  AuctionLike[]
+  follows       Follow[]
+  sentMessages     Message[]     @relation("SentMessages")
+  receivedMessages Message[]     @relation("ReceivedMessages")
+  notifications Notification[]
+  reports       Report[]
+  readReceipts  ReadReceipt[]
+  
+  @@map("users")
+}
+
+model Profile {
+  id          String    @id @default(uuid())
+  userId      String    @unique
+  firstName   String
+  lastName    String
+  avatar      String?
+  phoneNumber String?
+  address     String?
+  city        String?
+  country     String    @default("السعودية")
+  dateOfBirth DateTime?
+  bio         String?
+  isVerified  Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("profiles")
+}
+
+model Seller {
+  id               String   @id @default(uuid())
+  userId           String   @unique
+  businessName     String
+  businessLicense  String?
+  taxNumber        String?
+  bankAccount      String?
+  commission       Float    @default(5.0) // Platform commission percentage
+  rating           Float    @default(0.0)
+  totalSales       Int      @default(0)
+  isVerified       Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  auctions Auction[]
+  follows  Follow[]
+
+  @@map("sellers")
+}
+
+// Category Management
+model Category {
+  id          String    @id @default(uuid())
+  nameAr      String
+  nameEn      String?
+  description String?
+  icon        String?
+  isActive    Boolean   @default(true)
+  order       Int       @default(0)
+  parentId    String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  parent     Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children   Category[] @relation("CategoryHierarchy")
+  auctions   Auction[]
+
+  @@map("categories")
+}
+
+// Auction Management
+model Auction {
+  id              String        @id @default(uuid())
+  title           String
+  description     String
+  shortDescription String?
+  startingPrice   Float
+  currentPrice    Float
+  minimumBid      Float
+  buyNowPrice     Float?
+  status          AuctionStatus @default(PENDING)
+  startTime       DateTime
+  endTime         DateTime
+  duration        Int // Duration in minutes
+  viewCount       Int           @default(0)
+  participantCount Int          @default(0)
+  totalBids       Int           @default(0)
+  isHighlighted   Boolean       @default(false)
+  location        String?
+  terms           String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  // Foreign Keys
+  sellerId    String
+  categoryId  String
+  winnerId    String?
+  winningBidId String?
+
+  // Relations
+  seller      Seller           @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  category    Category         @relation(fields: [categoryId], references: [id])
+  winner      User?            @relation(fields: [winnerId], references: [id])
+  winningBid  Bid?             @relation("WinningBid", fields: [winningBidId], references: [id])
+  video       AuctionVideo?
+  images      AuctionImage[]
+  bids        Bid[]
+  comments    Comment[]
+  likes       AuctionLike[]
+  follows     Follow[]
+  reports     Report[]
+  timelineEvents TimelineEvent[]
+  notifications Notification[]
+
+  @@map("auctions")
+}
+
+model AuctionVideo {
+  id           String   @id @default(uuid())
+  auctionId    String   @unique
+  filename     String
+  originalName String
+  mimeType     String
+  size         Int
+  duration     Int? // Duration in seconds
+  thumbnailUrl String?
+  videoUrl     String
+  isProcessed  Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  auction Auction @relation(fields: [auctionId], references: [id], onDelete: Cascade)
+
+  @@map("auction_videos")
+}
+
+model AuctionImage {
+  id           String   @id @default(uuid())
+  auctionId    String
+  filename     String
+  originalName String
+  mimeType     String
+  size         Int
+  imageUrl     String
+  order        Int      @default(0)
+  isMain       Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  auction Auction @relation(fields: [auctionId], references: [id], onDelete: Cascade)
+
+  @@map("auction_images")
+}
+
+// Bidding System
+model Bid {
+  id        String    @id @default(uuid())
+  amount    Float
+  timestamp DateTime  @default(now())
+  isValid   Boolean   @default(true)
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  // Foreign Keys
+  userId    String
+  auctionId String
+
+  // Relations
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  auction   Auction   @relation(fields: [auctionId], references: [id], onDelete: Cascade)
+  winningAuction Auction? @relation("WinningBid")
+
+  @@map("bids")
+}
+
+model TimelineEvent {
+  id        String          @id @default(uuid())
+  auctionId String
+  type      TimelineType
+  timestamp DateTime        @default(now())
+  data      Json? // Additional event data
+  createdAt DateTime        @default(now())
+
+  auction Auction @relation(fields: [auctionId], references: [id], onDelete: Cascade)
+
+  @@map("timeline_events")
+}
+
+// Social Features
+model Comment {
+  id        String   @id @default(uuid())
+  content   String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Foreign Keys
+  userId    String
+  auctionId String
+  parentId  String?
+
+  // Relations
+  user     User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  auction  Auction       @relation(fields: [auctionId], references: [id], onDelete: Cascade)
+  parent   Comment?      @relation("CommentReplies", fields: [parentId], references: [id])
+  replies  Comment[]     @relation("CommentReplies")
+  likes    CommentLike[]
+  reports  Report[]
+
+  @@map("comments")
+}
+
+model CommentLike {
+  id        String   @id @default(uuid())
+  userId    String
+  commentId String
+  createdAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  comment Comment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, commentId])
+  @@map("comment_likes")
+}
+
+model AuctionLike {
+  id        String   @id @default(uuid())
+  userId    String
+  auctionId String
+  createdAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  auction Auction @relation(fields: [auctionId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, auctionId])
+  @@map("auction_likes")
+}
+
+model Follow {
+  id         String     @id @default(uuid())
+  userId     String
+  targetType FollowType
+  targetId   String // Can be auctionId, sellerId, or categoryId
+  createdAt  DateTime   @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  seller   Seller? @relation(fields: [targetId], references: [id], onDelete: Cascade)
+  auction  Auction? @relation(fields: [targetId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, targetType, targetId])
+  @@map("follows")
+}
+
+// Messaging System
+model Conversation {
+  id           String   @id @default(uuid())
+  type         ConversationType @default(PRIVATE)
+  title        String?
+  lastMessage  String?
+  lastMessageAt DateTime?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  messages     Message[]
+  participants ConversationParticipant[]
+
+  @@map("conversations")
+}
+
+model ConversationParticipant {
+  id             String   @id @default(uuid())
+  conversationId String
+  userId         String
+  joinedAt       DateTime @default(now())
+  leftAt         DateTime?
+  role           ParticipantRole @default(MEMBER)
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, userId])
+  @@map("conversation_participants")
+}
+
+model Message {
+  id             String      @id @default(uuid())
+  conversationId String
+  senderId       String
+  receiverId     String?
+  content        String
+  type           MessageType @default(TEXT)
+  attachmentUrl  String?
+  isRead         Boolean     @default(false)
+  isDeleted      Boolean     @default(false)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  conversation Conversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User          @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver     User?         @relation("ReceivedMessages", fields: [receiverId], references: [id])
+  readReceipts ReadReceipt[]
+  reports      Report[]
+
+  @@map("messages")
+}
+
+model ReadReceipt {
+  id        String   @id @default(uuid())
+  messageId String
+  userId    String
+  readAt    DateTime @default(now())
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId])
+  @@map("read_receipts")
+}
+
+// Notification System
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String
+  type      NotificationType
+  title     String
+  message   String
+  data      Json? // Additional notification data
+  isRead    Boolean          @default(false)
+  actionUrl String?
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  // Optional Relations
+  auctionId String?
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  auction Auction? @relation(fields: [auctionId], references: [id])
+
+  @@map("notifications")
+}
+
+// Report System
+model Report {
+  id          String       @id @default(uuid())
+  reporterId  String
+  targetType  ReportType
+  targetId    String
+  reason      ReportReason
+  description String?
+  status      ReportStatus @default(PENDING)
+  adminNotes  String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  reporter User      @relation(fields: [reporterId], references: [id], onDelete: Cascade)
+  auction  Auction?  @relation(fields: [targetId], references: [id])
+  comment  Comment?  @relation(fields: [targetId], references: [id])
+  message  Message?  @relation(fields: [targetId], references: [id])
+
+  @@map("reports")
+}
+
+// System Settings
+model Setting {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  value     String
+  type      String   @default("string")
+  category  String   @default("general")
+  isPublic  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("settings")
+}
+
+// Audit Log
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  action    String
+  resource  String
+  resourceId String?
+  oldValues Json?
+  newValues Json?
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  @@map("audit_logs")
+}
+
+// Enums
+enum UserRole {
+  ADMIN
+  MODERATOR
+  SELLER
+  USER
+}
+
+enum AuctionStatus {
+  DRAFT
+  PENDING
+  APPROVED
+  LIVE
+  ENDED
+  CANCELLED
+  SUSPENDED
+}
+
+enum TimelineType {
+  AUCTION_STARTED
+  BID_PLACED
+  PRICE_INCREASED
+  USER_JOINED
+  USER_LEFT
+  AUCTION_EXTENDED
+  AUCTION_ENDED
+  WINNER_ANNOUNCED
+}
+
+enum FollowType {
+  AUCTION
+  SELLER
+  CATEGORY
+}
+
+enum ConversationType {
+  PRIVATE
+  GROUP
+  SUPPORT
+}
+
+enum ParticipantRole {
+  ADMIN
+  MEMBER
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  VIDEO
+  DOCUMENT
+  SYSTEM
+}
+
+enum NotificationType {
+  AUCTION_STARTED
+  AUCTION_ENDING
+  BID_OUTBID
+  BID_ACCEPTED
+  AUCTION_WON
+  AUCTION_LOST
+  MESSAGE_RECEIVED
+  COMMENT_REPLY
+  FOLLOW_AUCTION
+  SYSTEM_ALERT
+  REPORT_UPDATE
+}
+
+enum ReportType {
+  AUCTION
+  COMMENT
+  MESSAGE
+  USER
+}
+
+enum ReportReason {
+  INAPPROPRIATE_CONTENT
+  SPAM
+  HARASSMENT
+  FAKE_AUCTION
+  FRAUD
+  COPYRIGHT
+  OTHER
+}
+
+enum ReportStatus {
+  PENDING
+  INVESTIGATING
+  RESOLVED
+  REJECTED
+  CLOSED
+}
